@@ -11,6 +11,11 @@ jobs:
     name: Unit Tests & SonarCloud Analysis
     runs-on: ubuntu-latest
 
+    env:
+      # Directorio aislado — el AGP solo verá lo que nosotros pongamos aquí
+      ANDROID_HOME: /opt/android-sdk-legacy
+      ANDROID_SDK_ROOT: /opt/android-sdk-legacy
+
     steps:
 
       # ─── 1. Checkout ────────────────────────────────────────────────────────
@@ -19,83 +24,96 @@ jobs:
         with:
           fetch-depth: 0
 
-      # ─── 2. JDK 17 primero — sdkmanager lo necesita ─────────────────────────
-      - name: Set up JDK 17 (for sdkmanager + SonarCloud)
-        uses: actions/setup-java@v4
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: gradle
-
-      # ─── 3. Instalar SDK 27 limpio con sdkmanager ───────────────────────────
-      # El runner trae SDKs modernos (API 33+) con <extension-level> en sus
-      # package.xml — campo desconocido para el AGP 2.x/3.x de este proyecto.
-      # Instalamos solo API 27 + build-tools 27.0.3 y apuntamos ANDROID_HOME
-      # a un directorio propio para que el AGP no vea las plataformas modernas.
-      - name: Install Android SDK 27 via sdkmanager
-        run: |
-          SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-          "$SDKMANAGER" "platforms;android-27" "build-tools;27.0.3" "platform-tools"
-
-      # ─── 4. Eliminar plataformas modernas del SDK del runner ────────────────
-      # Borramos todas las plataformas excepto android-27 para que el AGP
-      # antiguo no parsee los XMLs con <extension-level>.
-      - name: Remove modern SDK platforms (keep only android-27)
-        run: |
-          PLATFORMS_DIR="$ANDROID_SDK_ROOT/platforms"
-          for dir in "$PLATFORMS_DIR"/*/; do
-            platform=$(basename "$dir")
-            if [ "$platform" != "android-27" ]; then
-              echo "Removing $platform"
-              rm -rf "$dir"
-            fi
-          done
-          echo "Remaining platforms:"
-          ls "$PLATFORMS_DIR"
-
-      # ─── 5. Bajar a JDK 8 para el build (AGP 2.x/3.x) ──────────────────────
-      # Después de usar sdkmanager con JDK 17, bajamos a JDK 8 para que
-      # el AGP no falle al parsear la versión de Java.
-      - name: Switch to JDK 8 for Gradle build
+      # ─── 2. JDK 8 para el build ─────────────────────────────────────────────
+      - name: Set up JDK 8
         uses: actions/setup-java@v4
         with:
           java-version: '8'
           distribution: 'temurin'
+          cache: gradle
 
-      # ─── 6. Gradle cache ────────────────────────────────────────────────────
+      # ─── 3. Descargar platform android-27 desde el archivo histórico ─────────
+      # El sdkmanager moderno escribe XMLs con <base-extension>/<extension-level>
+      # que el AGP 2.x/3.x no reconoce, incluso al instalar API 27.
+      # Descargamos el ZIP directamente del repositorio dl.google.com con la
+      # URL del repositorio de 2018, cuyo package.xml usa el schema antiguo.
+      - name: Download & install Android platform-27 (legacy zip)
+        run: |
+          set -e
+          SDK="$ANDROID_HOME"
+          mkdir -p "$SDK/platforms" "$SDK/build-tools" "$SDK/platform-tools"
+
+          # ── platform android-27 (schema antiguo, sin base-extension) ──
+          echo "Downloading platform android-27..."
+          curl -fsSL \
+            "https://dl.google.com/android/repository/platform-27_r03.zip" \
+            -o /tmp/platform-27.zip
+          unzip -q /tmp/platform-27.zip -d /tmp/platform-27-extracted
+          # El ZIP descomprime en android-8.1.0 o android-27
+          PLAT_DIR=$(find /tmp/platform-27-extracted -maxdepth 1 -mindepth 1 -type d | head -1)
+          mv "$PLAT_DIR" "$SDK/platforms/android-27"
+
+          # ── build-tools 27.0.3 ──
+          echo "Downloading build-tools 27.0.3..."
+          curl -fsSL \
+            "https://dl.google.com/android/repository/build-tools_r27.0.3-linux.zip" \
+            -o /tmp/build-tools.zip
+          unzip -q /tmp/build-tools.zip -d /tmp/bt-extracted
+          BT_DIR=$(find /tmp/bt-extracted -maxdepth 1 -mindepth 1 -type d | head -1)
+          mv "$BT_DIR" "$SDK/build-tools/27.0.3"
+
+          # ── platform-tools mínimo (adb, etc.) ──
+          echo "Downloading platform-tools..."
+          curl -fsSL \
+            "https://dl.google.com/android/repository/platform-tools-latest-linux.zip" \
+            -o /tmp/platform-tools.zip
+          unzip -q /tmp/platform-tools.zip -d /tmp/pt-extracted
+          mv /tmp/pt-extracted/platform-tools/* "$SDK/platform-tools/"
+
+          # ── Verificar que el package.xml no tenga base-extension ──
+          echo "--- package.xml snippet ---"
+          head -20 "$SDK/platforms/android-27/package.xml" || true
+
+      # ─── 4. Exportar SDK al PATH de los pasos siguientes ────────────────────
+      - name: Export SDK paths
+        run: |
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/build-tools/27.0.3" >> $GITHUB_PATH
+          echo "ANDROID_HOME=$ANDROID_HOME"   >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+
+      # ─── 5. Gradle cache ────────────────────────────────────────────────────
       - name: Cache Gradle & Android caches
         uses: actions/cache@v4
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
-            ~/.android/build-cache
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # ─── 7. Permisos de gradlew ──────────────────────────────────────────────
+      # ─── 6. Permisos de gradlew ──────────────────────────────────────────────
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ─── 8. Verificar entorno ────────────────────────────────────────────────
+      # ─── 7. Verificar entorno ────────────────────────────────────────────────
       - name: Show environment info
         run: |
           java -version
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-          ls "$ANDROID_SDK_ROOT/platforms/"
-          ls "$ANDROID_SDK_ROOT/build-tools/"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/platforms/"
+          ls "$ANDROID_HOME/build-tools/"
 
-      # ─── 9. Pruebas unitarias ────────────────────────────────────────────────
+      # ─── 8. Pruebas unitarias ────────────────────────────────────────────────
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
-      # ─── 10. Reporte de cobertura JaCoCo ─────────────────────────────────────
+      # ─── 9. Reporte de cobertura JaCoCo ─────────────────────────────────────
       - name: Generate JaCoCo coverage report
         run: ./gradlew jacocoTestReport --stacktrace
 
-      # ─── 11. Publicar resultados de pruebas ──────────────────────────────────
+      # ─── 10. Publicar resultados de pruebas ──────────────────────────────────
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -103,7 +121,7 @@ jobs:
           name: unit-test-results
           path: app/build/reports/tests/testDebugUnitTest/
 
-      # ─── 12. Publicar reporte de cobertura ───────────────────────────────────
+      # ─── 11. Publicar reporte de cobertura ───────────────────────────────────
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
@@ -111,14 +129,14 @@ jobs:
           name: coverage-report
           path: app/build/reports/jacoco/
 
-      # ─── 13. Volver a JDK 17 para SonarCloud ─────────────────────────────────
-      - name: Switch back to JDK 17 for SonarCloud
+      # ─── 12. JDK 17 para SonarCloud ──────────────────────────────────────────
+      - name: Switch to JDK 17 for SonarCloud
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ─── 14. SonarCloud ──────────────────────────────────────────────────────
+      # ─── 13. SonarCloud ──────────────────────────────────────────────────────
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
