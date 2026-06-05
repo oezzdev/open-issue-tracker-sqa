@@ -5,10 +5,6 @@ if (file('credentials.config').exists() ) {
     apply from: 'credentials.config';
 }
 
-plugins {
-  id 'org.sonarqube' version '7.3.1.8318'
-}
-
 android {
     compileSdkVersion 27
     buildToolsVersion '27.0.3'
@@ -61,9 +57,20 @@ dependencies {
     compile(name: 'lib', ext: 'aar')
 }
 
+buildscript {
+  repositories {
+    gradlePluginPortal()
+  }
+  dependencies {
+    classpath("org.sonarqube:org.sonarqube.gradle.plugin:7.3.1.8318")
+  }
+}
+
+apply(plugin = "org.sonarqube")
+
 sonar {
   properties {
-    property("sonar.projectKey", "tracker-sqa")
-    property("sonar.organization", "oezzdev") 
+    property "sonar.projectKey", "tracker-sqa"
+    property "sonar.organization", "oezzdev"
   }
 }
