@@ -1,6 +1,10 @@
 apply plugin: 'com.android.application'
 apply plugin: 'com.github.triplet.play'
 
+plugins {
+  id "org.sonarqube" version "7.3.1.8318"
+}
+
 if (file('credentials.config').exists() ) {
     apply from: 'credentials.config';
 }
@@ -55,10 +59,6 @@ dependencies {
 
     //Self compiled .aar version of wishlist
     compile(name: 'lib', ext: 'aar')
-}
-
-plugins {
-  id("org.sonarqube") version "7.3.1.8318"
 }
 
 sonar {
