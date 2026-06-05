@@ -17,18 +17,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          # SonarCloud necesita el historial completo para calcular blame / nuevas líneas
-          fetch-depth: 0
+          fetch-depth: 0   # requerido por SonarCloud
 
-      # ─── 2. JDK ─────────────────────────────────────────────────────────────
-      - name: Set up JDK 17
+      # ─── 2. JDK 11 ──────────────────────────────────────────────────────────
+      # El AGP antiguo de ForkHub falla con JDK 17+ porque no reconoce
+      # versiones de 3 segmentos como "17.0.19". JDK 11 es la versión
+      # máxima compatible con ese rango de AGP (2.x / 3.x).
+      - name: Set up JDK 11
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
+          java-version: '11'
           distribution: 'temurin'
           cache: gradle
 
-      # ─── 3. Gradle cache ────────────────────────────────────────────────────
+      # ─── 3. Forzar JAVA_HOME para que Gradle lo detecte correctamente ────────
+      # Algunos AGP viejos leen la versión de java.version del sistema
+      # y pueden confundirse si hay un JDK residual. Exportamos explícitamente.
+      - name: Set JAVA_HOME explicitly
+        run: echo "JAVA_HOME=$JAVA_HOME" >> $GITHUB_ENV
+
+      # ─── 4. Gradle cache ────────────────────────────────────────────────────
       - name: Cache Gradle & Android caches
         uses: actions/cache@v4
         with:
@@ -40,17 +48,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # ─── 4. Permisos de gradlew ──────────────────────────────────────────────
+      # ─── 5. Permisos de gradlew ──────────────────────────────────────────────
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ─── 5. Pruebas unitarias con cobertura (JaCoCo) ─────────────────────────
+      # ─── 6. Pruebas unitarias ────────────────────────────────────────────────
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest jacocoTestReport --stacktrace
-        # Si el proyecto no tiene aún la tarea jacocoTestReport configurada,
-        # usa solo: ./gradlew testDebugUnitTest --stacktrace
+        run: ./gradlew testDebugUnitTest --stacktrace
 
-      # ─── 6. Publicar resultados de pruebas como artefacto ────────────────────
+      # ─── 7. Reporte de cobertura JaCoCo ─────────────────────────────────────
+      # Si el proyecto no tiene la tarea jacocoTestReport, este paso fallará
+      # con gracia (continue-on-error). Añade la configuración de JaCoCo
+      # a app/build.gradle si quieres cobertura real en SonarCloud.
+      - name: Generate JaCoCo coverage report
+        run: ./gradlew jacocoTestReport --stacktrace
+        continue-on-error: true
+
+      # ─── 8. Publicar resultados de pruebas ───────────────────────────────────
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -58,7 +72,7 @@ jobs:
           name: unit-test-results
           path: app/build/reports/tests/testDebugUnitTest/
 
-      # ─── 7. Publicar reporte de cobertura como artefacto ─────────────────────
+      # ─── 9. Publicar reporte de cobertura ────────────────────────────────────
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,12 +80,12 @@ jobs:
           name: coverage-report
           path: app/build/reports/jacoco/
 
-      # ─── 8. SonarCloud ───────────────────────────────────────────────────────
+      # ─── 10. SonarCloud ──────────────────────────────────────────────────────
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # acceso a PR info
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}      # secreto en tu repo
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
             -Dsonar.projectKey=jmontesino_open-issue-tracker-sqa
@@ -80,4 +94,4 @@ jobs:
             -Dsonar.tests=app/src/test
             -Dsonar.java.binaries=app/build/intermediates/javac/debug/classes
             -Dsonar.coverage.jacoco.xmlReportPaths=app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
-            -Dsonar.java.source=17
+            -Dsonar.java.source=8
