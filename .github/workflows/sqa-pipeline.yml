@@ -128,10 +128,10 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.projectKey=jmontesino_open-issue-tracker-sqa
-            -Dsonar.organization=jmontesino
+            -Dsonar.projectKey=oezzdev_open-issue-tracker-sqa
+            -Dsonar.organization=oezzdev
             -Dsonar.sources=app/src/main
-            -Dsonar.tests=app/src/test
+            -Dsonar.tests=app/src/androidTest
             -Dsonar.java.binaries=app/build/intermediates/javac/debug/classes
             -Dsonar.coverage.jacoco.xmlReportPaths=app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
             -Dsonar.java.source=8
