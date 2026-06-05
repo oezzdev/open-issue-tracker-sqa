@@ -6,13 +6,16 @@ if (file('credentials.config').exists() ) {
 }
 
 android {
-    compileSdkVersion 27
-    buildToolsVersion '27.0.3'
+    // 1. Subir la versión de compilación a una reciente (33 o 34 son el estándar actual)
+    compileSdkVersion 34 
+    
+    // 2. Eliminar buildToolsVersion. Ya no es necesario especificarlo; 
+    // el plugin de Android Gradle (AGP) moderno descarga y usa la versión correcta automáticamente.
 
     defaultConfig {
         applicationId 'jp.forkhub'
-        minSdkVersion 19
-        targetSdkVersion 27
+        minSdkVersion 19 // Puedes mantenerlo en 19 si aún requieres soporte para dispositivos muy antiguos
+        targetSdkVersion 34 // Debe coincidir con el compileSdkVersion
         versionCode 1020900
         versionName '1.2.9'
     }
