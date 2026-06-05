@@ -1,5 +1,6 @@
 apply plugin: 'com.android.application'
 apply plugin: 'com.github.triplet.play'
+apply plugin: 'jacoco'
 
 if (file('credentials.config').exists() ) {
     apply from: 'credentials.config';
@@ -55,4 +56,24 @@ dependencies {
 
     //Self compiled .aar version of wishlist
     compile(name: 'lib', ext: 'aar')
+}
+
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+tasks.withType(Test) {
+    jacoco.includeNoLocationClasses = true
+    jacoco.excludes = ['jdk.internal.*']
+}
+
+task jacocoTestReport(type: JacocoReport, dependsOn: ['testDebugUnitTest']) {
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    def fileFilter = ['**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*']
+    sourceDirectories.setFrom(files(["src/main/java"]))
+    classDirectories.setFrom(fileTree(dir: "$buildDir/intermediates/javac/debug/classes", excludes: fileFilter))
+    executionData.setFrom(fileTree(dir: "$buildDir", includes: ["jacoco/testDebugUnitTest.exec"]))
 }
