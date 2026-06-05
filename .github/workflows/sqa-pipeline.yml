@@ -132,6 +132,4 @@ jobs:
             -Dsonar.organization=oezzdev
             -Dsonar.sources=app/src/main
             -Dsonar.tests=app/src/androidTest
-            -Dsonar.java.binaries=app/build/intermediates/javac/debug/classes
-            -Dsonar.coverage.jacoco.xmlReportPaths=app/build/reports/jacoco/jacocoTestReport/jacocoTestReport.xml
             -Dsonar.java.source=8
