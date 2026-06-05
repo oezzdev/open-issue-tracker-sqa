@@ -69,8 +69,8 @@ tasks.withType(Test) {
 
 task jacocoTestReport(type: JacocoReport, dependsOn: ['testDebugUnitTest']) {
     reports {
-        xml.required = true
-        html.required = true
+        xml.enabled = true
+        html.enabled = true
     }
     def fileFilter = ['**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*']
     sourceDirectories.setFrom(files(["src/main/java"]))
