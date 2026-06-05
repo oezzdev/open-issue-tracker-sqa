@@ -113,6 +113,7 @@ jobs:
 
       # ─── 13. Volver a JDK 17 para SonarCloud ─────────────────────────────────
       - name: Switch back to JDK 17 for SonarCloud
+        if: always()
         uses: actions/setup-java@v4
         with:
           java-version: '17'
@@ -120,6 +121,7 @@ jobs:
 
       # ─── 14. SonarCloud ──────────────────────────────────────────────────────
       - name: SonarCloud Scan
+        if: always()
         uses: SonarSource/sonarcloud-github-action@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
