@@ -17,13 +17,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # requerido por SonarCloud
+          fetch-depth: 0
 
-      # ─── 2. JDK 8 ───────────────────────────────────────────────────────────
-      # compileSdkVersion 27 + buildToolsVersion 27.0.3 implican AGP 2.x/3.x.
-      # Ese rango de AGP parsea java.version esperando exactamente "1.x" o "x.y"
-      # y falla con versiones de 3 segmentos (11.0.x, 17.0.x). JDK 8 es el
-      # único que reporta "1.8.0_xxx", compatible sin patches.
+      # ─── 2. JDK 8 (requerido por AGP 2.x/3.x con compileSdkVersion 27) ─────
       - name: Set up JDK 8
         uses: actions/setup-java@v4
         with:
@@ -31,7 +27,19 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # ─── 3. Gradle cache ────────────────────────────────────────────────────
+      # ─── 3. Instalar Android SDK 27 limpio ──────────────────────────────────
+      # El runner ubuntu-latest trae SDK moderno (API 33+) con XMLs que usan
+      # <extension-level>, campo desconocido para el AGP antiguo de este proyecto.
+      # Sobreescribimos ANDROID_HOME con un SDK mínimo (solo lo que necesitamos).
+      - name: Set up Android SDK 27
+        uses: android-actions/setup-android@v3
+        with:
+          packages: >
+            platforms;android-27
+            build-tools;27.0.3
+            platform-tools
+
+      # ─── 4. Gradle cache ────────────────────────────────────────────────────
       - name: Cache Gradle & Android caches
         uses: actions/cache@v4
         with:
@@ -43,19 +51,28 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # ─── 4. Permisos de gradlew ──────────────────────────────────────────────
+      # ─── 5. Permisos de gradlew ──────────────────────────────────────────────
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      # ─── 5. Pruebas unitarias ────────────────────────────────────────────────
+      # ─── 6. Verificar entorno (útil para depurar) ────────────────────────────
+      - name: Show environment info
+        run: |
+          java -version
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ls "$ANDROID_HOME/platforms/" || true
+          ls "$ANDROID_HOME/build-tools/" || true
+
+      # ─── 7. Pruebas unitarias ────────────────────────────────────────────────
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
-      # ─── 6. Reporte de cobertura JaCoCo ─────────────────────────────────────
+      # ─── 8. Reporte de cobertura JaCoCo ─────────────────────────────────────
       - name: Generate JaCoCo coverage report
         run: ./gradlew jacocoTestReport --stacktrace
 
-      # ─── 7. Publicar resultados de pruebas ───────────────────────────────────
+      # ─── 9. Publicar resultados de pruebas ───────────────────────────────────
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,7 +80,7 @@ jobs:
           name: unit-test-results
           path: app/build/reports/tests/testDebugUnitTest/
 
-      # ─── 8. Publicar reporte de cobertura ────────────────────────────────────
+      # ─── 10. Publicar reporte de cobertura ───────────────────────────────────
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
@@ -71,16 +88,14 @@ jobs:
           name: coverage-report
           path: app/build/reports/jacoco/
 
-      # ─── 9. JDK 17 para SonarCloud ──────────────────────────────────────────
-      # El scanner de SonarCloud requiere JDK 17+. Instalamos un segundo JDK
-      # SIN sobreescribir JAVA_HOME del build; lo referenciamos manualmente.
+      # ─── 11. JDK 17 para SonarCloud (requiere mínimo JDK 17) ────────────────
       - name: Set up JDK 17 for SonarCloud scanner
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ─── 10. SonarCloud ──────────────────────────────────────────────────────
+      # ─── 12. SonarCloud ──────────────────────────────────────────────────────
       - name: SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
         env:
