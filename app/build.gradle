@@ -73,7 +73,7 @@ apply(plugin = "org.sonarqube")
 
 sonar {
   properties {
-    property "sonar.projectKey", "tracker-sqa"
+    property "sonar.projectKey", "oezzdev_open-issue-tracker-sqa"
     property "sonar.organization", "oezzdev"
   }
 }
