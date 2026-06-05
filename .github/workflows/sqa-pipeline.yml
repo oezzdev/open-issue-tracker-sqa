@@ -26,3 +26,4 @@ jobs:
             -Dsonar.tests=app/src/androidTest
             -Dsonar.java.binaries=.
             -Dsonar.java.source=8
+          
